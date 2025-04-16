@@ -108,17 +108,24 @@ def convert_card(self, cards, Is_othersum, deck):
 
 class Player:
     def __init__(self):
-        self.card = None
+        self.mycard = None
         self.score = 0
         self.visible = 0
         self.expect_card = None
         self.expect = 0
+        self.others_expect_sum = 0
+        self.expect_cards = []
+        self.deck = Deck()
 
-    def play_turn(self, game_state):
-        return self.ai_turn(game_state)
+    def ai_turn(self, others_info, sum, action):
+        # AIの行動を決定するロジックを実装する
+        # 全員の手札を配列に格納する
+        self.expect_cards = [card for card in others_info["card_info"]]
+        self.mycard = self.deck.draw()
+        self.expect_cards.append(self.mycard)
+        sorted(self.expect_cards, reverse=True)
+   
 
-
-    def ai_turn(self, game_state):
         if self.visible > game_state["call"]:
             raise_num = random.randint(1, self.visible - game_state["call"])
             return True, raise_num
