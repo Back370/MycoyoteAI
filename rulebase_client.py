@@ -116,10 +116,13 @@ class Player:
         self.others_expect_sum = 0
         self.expect_cards = []
         self.deck = Deck()
+        self.players_life = {} #{"player_name": life}
 
     def ai_turn(self, others_info, sum, action):
         # AIの行動を決定するロジックを実装する
         # 全員の手札を配列に格納する
+        now_players_life = {name, life for name, life in others_info["players_life"].items()}
+
         self.expect_cards = [card for card in others_info["card_info"]]
         self.mycard = self.deck.draw()
         self.expect_cards.append(self.mycard)
