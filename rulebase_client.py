@@ -117,16 +117,25 @@ class Player:
         self.expect_cards = []
         self.deck = Deck()
         self.players_life = {} #{"player_name": life}
+        self.previous_round_num = 0
 
-    def ai_turn(self, others_info, sum, action):
+    def ai_turn(self, others_info, sum, action, round_num):
         # AIの行動を決定するロジックを実装する
         # 全員の手札を配列に格納する
-        now_players_life = {name, life for name, life in others_info["players_life"].items()}
+        now_round_num = round_num
+        if now_round_num != self.previous_round_num:
+            self.previous_round_num = now_round_num
+            self.expect_cards = [card for card in others_info["card_info"]] # 他プレイヤーの手札を格納する
+            self.mycard = self.deck.draw() # 自分の手札を引く
+            self.expect_cards.append(self.mycard) # 自分の手札を格納する
+            sorted(self.expect_cards, reverse=True) # 降順にソートする
+            convert_card(self.expect_cards, False, self.deck) # 自分の手札を変換する
+            self.others_expect_sum = convert_card(self.expect_cards, True, self.deck) # プレイヤーの手札を変換する
+            
+        
+      
 
-        self.expect_cards = [card for card in others_info["card_info"]]
-        self.mycard = self.deck.draw()
-        self.expect_cards.append(self.mycard)
-        sorted(self.expect_cards, reverse=True)
+
    
 
         if self.visible > game_state["call"]:
