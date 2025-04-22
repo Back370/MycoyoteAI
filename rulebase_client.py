@@ -13,7 +13,7 @@ class Deck:
                       10, 10, 10, 15, 15, 20,
                       100, 101, 102, 103]
 
-        self.cashed_cards = [] #山札に戻すカードを格納するリスト
+        #self.cashed_cards = [] #山札に戻すカードを格納するリスト
 
     def shuffle(self):
         print ("Deck shuffled.")
@@ -24,10 +24,11 @@ class Deck:
             return self.cards.pop()
         else:
             print("No card left in the deck.")
-            random.shuffle(self.cashed_cards) #山札に戻すカードをシャッフルする
+            #random.shuffle(self.cashed_cards) #山札に戻すカードをシャッフルする
             #山札が空になったら、捨て札を山札に追加する
-            self.cards = self.cashed_cards.copy()
-            self.cashed_cards = []
+           # self.cards = self.cashed_cards.copy()
+           # self.cashed_cards = []
+            self.reset()
             return self.cards.pop()
 
     def top_show_card(self):
@@ -84,8 +85,8 @@ class SampleClient(Client):
                     new_card = 0  #他プレイヤーの合計値を計算する場合
                 else :
                     new_card = deck.top_show_card()
-                    deck.cashed_cards.append(new_card) #103を山札に戻す
-                print(f"Drawn new card: {deck.cashed_cards}")
+                    #deck.cashed_cards.append(103) #103を山札に戻す
+                #print(f"Drawn new card: {deck.cashed_cards}")
                 print(f"Drawn new card: {new_card}")
                 if new_card != None: #103を引いた時にNoneがcardsに含まれていたから
                    true_cards[index] = new_card
@@ -131,7 +132,7 @@ class SampleClient(Client):
             #　黒背景の０を引いたときに山札をリセットする
             if(self.is_shuffle_card):
                 self.deck.reset()
-                self.deck.cashed_cards = [] #山札に戻すカードをリセットする
+               # self.deck.cashed_cards = [] #山札に戻すカードをリセットする
                 self.is_shuffle_card = False
 
             self.expect_cards = [player["card_info"] for player in others_info] # 他プレイヤーの手札を格納する
@@ -143,23 +144,32 @@ class SampleClient(Client):
                      self.deck.cards.remove(card) # 場のカードを山札から削除する
                   else:
                      self.deck.reset()
-                     self.deck.cashed_cards = [] #山札に戻すカードをリセットする
+                     #self.deck.cashed_cards = [] #山札に戻すカードをリセットする
                      self.deck.cards.remove(card) # 場のカードを山札から削除する
                 else:
-                    random.shuffle(self.deck.cashed_cards) #山札に戻すカードをシャッフルする
-                    #山札が空になったら、捨て札を山札に追加する
-                    self.deck.cards = self.deck.cashed_cards.copy()
-                    self.deck.cashed_cards = []
+                    self.deck.reset()
+                    # random.shuffle(self.deck.cashed_cards) #山札に戻すカードをシャッフルする
+                    # #山札が空になったら、捨て札を山札に追加する
+                    # self.deck.cards = self.deck.cashed_cards.copy()
+                    # self.deck.cashed_cards = []
 
-            self.deck.cashed_cards.append(self.expect_cards) # 自分の手札を山札に戻す
+            for card in self.expect_cards:
+                #self.deck.cashed_cards.append(card)
             self.mycard = self.deck.top_show_card() # 自分の手札を引く
             self.expect_cards.append(self.mycard) # 自分の手札を格納する
             sorted(self.expect_cards, reverse=True) # 降順にソートする
             self.expect_sum = self.convert_card(self.expect_cards, False, self.deck)  # 場のカードの合計値を計算する
         else:
             #もし宣言できる数が予測値を超えないなら,その幅でランダムに選ぶ
-            if len(action[0:self.expect_sum]) > 0:
-                return random.choice(action[0:self.expect_sum])
+            if self.expect_sum in action:
+               expect_index = action.index(self.expect_sum) # 予測値のインデックスを取得する
+            else:
+               expect_index = action[1]
+            RED = '\033[31m'
+            END = '\033[0m'
+            print(RED  + str(expect_index) +  END)
+            if len(action[0:expect_index]) > 0:
+                return random.choice(action[0:expect_index])
             else:
                 return -1
 
@@ -170,7 +180,7 @@ class SampleClient(Client):
         select_action = self.ai_turn(others_info, sum, actions, round_num)
         RED = '\033[31m'
         END = '\033[0m'
-        print(RED +  str(select_action) + END)
+        print(RED  + str(select_action) +  END)
         return  select_action
 
 
