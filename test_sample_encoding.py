@@ -2,27 +2,128 @@ import numpy as np
 import json
 from typing import Dict, List, Union, Any
 
-# jsonファイルを文字列として読み込む関数
-# 辞書のリストを返す
-def load_game_states_from_json(json_file_path: str) -> List[Dict[str, Any]]:
+# 文字列型の引数を受け取り、JSONファイルを読み込んで辞書型で返す
+def load_game_states_from_json(json_file_path: str) -> Dict[str, Any]:
     """
-    JSONファイルからゲーム状態のリストを読み込む
+    JSONファイルからゲームのラウンド情報を読み込む
     
     Args:
-        json_file_path: ゲーム状態を含むJSONファイルのパス
+        json_file_path: ゲーム情報を含むJSONファイルのパス
     
     Returns:
-        List[Dict]: ゲーム状態のリスト
+        Dict: ゲーム情報を含む辞書
     """
     try:
         with open(json_file_path, 'r', encoding='utf-8') as f:
-            game_logs = json.load(f)
+            game_data = json.load(f)
         
-        print(f"Successfully loaded {len(game_logs)} game states from {json_file_path}")
-        return game_logs
+        print(f"Successfully loaded game data from {json_file_path}")
+        return game_data
     except Exception as e:
         print(f"Error loading JSON file: {e}")
-        return []
+        return {"round_info": []}
+
+def get_current_state_from_rounds(round_info: List[Dict[str, Any]], round_idx: int = -1, player_name: str = None) -> Dict[str, Any]:
+    """
+    ラウンド情報から特定のラウンドの状態を抽出する
+    
+    Args:
+        round_info: ラウンド情報のリスト
+        round_idx: 抽出するラウンドのインデックス（デフォルトは最新ラウンド）
+        player_name: 視点となるプレイヤー名（指定がない場合は最初のプレイヤー）
+    
+    Returns:
+        Dict: ゲーム状態を表す辞書
+    """
+    if not round_info:
+        return {}
+    
+    # 指定されたラウンド（デフォルトは最新）を取得
+    if round_idx < 0:
+        round_idx = len(round_info) + round_idx
+    
+    if round_idx < 0 or round_idx >= len(round_info):
+        round_idx = len(round_info) - 1
+    
+    current_round = round_info[round_idx]
+    
+    # プレイヤー情報を取得
+    players = current_round.get("player_info", [])
+    if not players:
+        return {}
+    
+    # 視点となるプレイヤーを決定
+    current_player_idx = 0
+    if player_name:
+        # enumerateで要素とインデックスを取得
+        for i, player in enumerate(players):
+            if player.get("name") == player_name:
+                current_player_idx = i
+                break
+    
+    current_player = players[current_player_idx]
+    
+    # 他のプレイヤーの情報を構築
+    others_info = []
+    for i, player in enumerate(players):
+        if i != current_player_idx:
+            # 位置関係を計算
+            player_count = len(players)
+            is_next = (i == (current_player_idx + 1) % player_count)
+            is_prev = (i == (current_player_idx - 1) % player_count)
+            
+            others_info.append({
+                "card_info": player.get("card", 0),
+                "is_next": is_next,
+                "is_prev": is_prev,
+                "life": player.get("life", 0)
+            })
+    
+    # ターン情報からゲームログを構築
+    turn_info = current_round.get("turn_info", [])
+    
+    # 合計値を計算
+    sum_val = (player.get("card", 0) for player in players if isinstance(player.get("card", 0), (int, float)))
+    
+    # 可能なアクションを計算（ここでは簡易的に）
+    # 実際のゲームルールに基づいて調整が必要
+    last_action = -1
+    if turn_info:
+        last_action = turn_info[-1].get("action", -1)
+    
+    # 次の合法的なアクションを計算
+    legal_action = []
+    if last_action < 0:
+        # 最初のアクション
+        legal_action = list(range(1, 6))
+    else:
+        # 次のアクションは前のアクション以上でなければならない
+        max_action = 140  # 適切な値に調整
+        legal_action = list(range(last_action + 1, min(last_action + 6, max_action + 1)))
+    
+    # 過去のラウンド情報も含めてログを構築
+    all_round_turn_info = []
+    for r in round_info[:round_idx+1]:
+        all_round_turn_info.extend(r.get("turn_info", []))
+    
+    game_state = {
+        "others_info": others_info,
+        "sum": sum_val,
+        "log": {
+            "round_count": current_round.get("round_count", 0),
+            "turn_info": [
+                {
+                    "turn_player": turn.get("turn_player", ""),
+                    "declared_value": turn.get("action", 0)
+                } for turn in all_round_turn_info
+            ],
+            "player_info": [{"name": player.get("name", "")} for player in players]
+        },
+        "legal_action": legal_action,
+        "current_player": current_player.get("name", "")
+    }
+    
+    return game_state
 
 def encode_state(state: Union[Dict[str, Any], str]) -> np.ndarray:
     """
@@ -30,25 +131,22 @@ def encode_state(state: Union[Dict[str, Any], str]) -> np.ndarray:
     
     Args:
         state: ゲーム状態（辞書形式またはJSONファイルパス）
-            - others_info: 他プレイヤーの情報
-            - sum: 他プレイヤーのカード合計
-            - log: ゲームログ情報
-            - legal_action: 可能な行動リスト
     
     Returns:
         np.array: エンコードされた状態ベクトル
     """
     # 文字列の場合はJSONファイルとして読み込む
     if isinstance(state, str):
-        state_data = load_game_states_from_json(state)
-        if not state_data:
+        game_data = load_game_states_from_json(state)
+        if not game_data or "round_info" not in game_data:
             raise ValueError(f"Could not load game state from {state}")
-        # 最初の状態を使用
-        state = state_data[0]["state"] if "state" in state_data[0] else state_data[0]
+        
+        # ラウンド情報から現在の状態を構築
+        state = get_current_state_from_rounds(game_data.get("round_info", []))
     
     # 辞書からキーを取得
     others_info = state.get("others_info", [])
-    sum_val = state.get("sum", 0)
+    sum_val = state.get("sum", 0) # 合計値いらない
     log_info = state.get("log", {"round_count": 0, "turn_info": [], "player_info": []})
     legal_action = state.get("legal_action", [])
     
@@ -133,95 +231,116 @@ def encode_state(state: Union[Dict[str, Any], str]) -> np.ndarray:
     
     return np.array(features, dtype=np.float32)
 
-def encode_batch_from_json(json_file_path: str) -> np.ndarray:
+def encode_batch_states(game_data: Dict[str, Any], player_name: str = None) -> np.ndarray:
     """
-    JSONファイルから複数のゲーム状態を読み込んでバッチエンコードする
+    ゲームデータから複数の状態を抽出してバッチエンコードする
     
     Args:
-        json_file_path: ゲーム状態を含むJSONファイルのパス
+        game_data: ゲームデータを含む辞書
+        player_name: 視点となるプレイヤー名
         
     Returns:
         np.ndarray: エンコードされた状態のバッチ
     """
-    game_states = load_game_states_from_json(json_file_path)
+    round_info = game_data.get("round_info", [])
     
-    # 各状態をエンコード
+    # 各ラウンドの状態をエンコード
     encoded_states = []
-    for log_entry in game_states:
-        # logエントリから状態を取得
-        state = log_entry.get("state", log_entry)
+    for i in range(len(round_info)):
+        state = get_current_state_from_rounds(round_info, i, player_name)
         encoded_state = encode_state(state)
         encoded_states.append(encoded_state)
     
     return np.array(encoded_states)
 
-def save_game_states_to_json(game_states: List[Dict[str, Any]], output_file: str) -> None:
+def save_game_states_to_json(game_data: Dict[str, Any], output_file: str) -> None:
     """
-    ゲーム状態のリストをJSONファイルに保存
+    ゲームデータをJSONファイルに保存
     
     Args:
-        game_states: 保存するゲーム状態のリスト
+        game_data: 保存するゲームデータ
         output_file: 出力JSONファイルのパス
     """
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(game_states, f, ensure_ascii=False, indent=2)
-        print(f"Successfully saved {len(game_states)} game states to {output_file}")
+            json.dump(game_data, f, ensure_ascii=False, indent=2)
+        print(f"Successfully saved game data to {output_file}")
     except Exception as e:
-        print(f"Error saving game states to JSON: {e}")
+        print(f"Error saving game data to JSON: {e}")
 
 # 使用例
 if __name__ == "__main__":
-    # JSONファイルからゲーム状態を読み込む例
     import sys
     
     if len(sys.argv) > 1:
         json_file = sys.argv[1]
-        print(f"Encoding game states from {json_file}")
+        print(f"Processing game data from {json_file}")
         
-        # 単一状態のエンコード
         try:
-            encoded_state = encode_state(json_file)
+            # ゲームデータをロード
+            game_data = load_game_states_from_json(json_file)
+            
+            # 最新ラウンドの状態を取得
+            current_state = get_current_state_from_rounds(game_data.get("round_info", []))
+            
+            # 状態をエンコード
+            encoded_state = encode_state(current_state)
             print(f"Encoded state shape: {encoded_state.shape}")
             print(f"First 10 values: {encoded_state[:10]}")
-        except Exception as e:
-            print(f"Error encoding single state: {e}")
-        
-        # バッチエンコードの例
-        try:
-            encoded_batch = encode_batch_from_json(json_file)
+            
+            # すべてのラウンドをバッチエンコード
+            encoded_batch = encode_batch_states(game_data)
             print(f"Encoded batch shape: {encoded_batch.shape}")
+            
         except Exception as e:
-            print(f"Error encoding batch: {e}")
+            print(f"Error processing game data: {e}")
     else:
         print("Usage: python encode_state.py <json_file_path>")
         
-        # テスト用のサンプルゲーム状態
-        sample_state = {
-            "others_info": [
-                {"card_info": 5, "is_next": True, "is_prev": False, "life": 3},
-                {"card_info": 10, "is_next": False, "is_prev": True, "life": 2}
-            ],
-            "sum": 30,
-            "log": {
-                "round_count": 2,
-                "turn_info": [
-                    {"turn_player": "Player1", "declared_value": 25},
-                    {"turn_player": "Player2", "declared_value": 30}
-                ],
-                "player_info": [
-                    {"name": "Player1"},
-                    {"name": "Player2"},
-                    {"name": "Player3"}
-                ]
-            },
-            "legal_action": [31, 32, 33, 34, 35]
+        # テスト用のサンプルゲームデータ
+        sample_game_data = {
+            "round_info": [
+                {
+                    "round_count": 1,
+                    "player_info": [
+                        {"name": "PreAI1", "life": 3, "card": 1},
+                        {"name": "PreAI2", "life": 3, "card": -10},
+                        {"name": "PreAI3", "life": 3, "card": 4},
+                        {"name": "PreAI4", "life": 3, "card": 2},
+                        {"name": "PreAI5", "life": 3, "card": 102}
+                    ],
+                    "turn_info": [
+                        {"turn_count": 0, "turn_player": "PreAI1", "action": -1}
+                    ]
+                },
+                {
+                    "round_count": 2,
+                    "player_info": [
+                        {"name": "PreAI1", "life": 3, "card": 103},
+                        {"name": "PreAI2", "life": 3, "card": -5},
+                        {"name": "PreAI3", "life": 3, "card": 4},
+                        {"name": "PreAI4", "life": 3, "card": 3},
+                        {"name": "PreAI5", "life": 2, "card": 10}
+                    ],
+                    "turn_info": [
+                        {"turn_count": 0, "turn_player": "PreAI1", "action": 1},
+                        {"turn_count": 1, "turn_player": "PreAI2", "action": 2},
+                        {"turn_count": 2, "turn_player": "PreAI3", "action": 6},
+                        {"turn_count": 3, "turn_player": "PreAI4", "action": 7},
+                        {"turn_count": 4, "turn_player": "PreAI5", "action": 14},
+                        {"turn_count": 5, "turn_player": "PreAI1", "action": -1}
+                    ]
+                }
+            ]
         }
         
-        # サンプル状態のエンコード
+        # サンプルデータから状態を抽出
+        sample_state = get_current_state_from_rounds(sample_game_data.get("round_info", []))
+        
+        # サンプル状態をエンコード
         encoded = encode_state(sample_state)
         print(f"Sample state encoded shape: {encoded.shape}")
         
         # サンプルをJSONに保存
-        save_game_states_to_json([{"state": sample_state, "action": 31, "player_id": 0}], "sample_game_state.json")
-        print("Saved sample game state to sample_game_state.json")
+        save_game_states_to_json(sample_game_data, "sample_game_data.json")
+        print("Saved sample game data to sample_game_data.json")

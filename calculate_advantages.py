@@ -1,4 +1,6 @@
-def calculate_advantages(state, advantage_net):
+from collections import defaultdict
+
+def calculate_advantages(game_states, advantage_net):
     """
     Calculate counterfactual advantages for each player's decisions
     
@@ -10,6 +12,7 @@ def calculate_advantages(state, advantage_net):
     Returns:
         dict: Advantages for each player's information sets
     """
+    #キーがない場合そのキーを作成する
     advantages = defaultdict(list)
     
     # Process game trajectory in reverse to calculate counterfactual values
@@ -24,7 +27,7 @@ def calculate_advantages(state, advantage_net):
         encoded_state = es.encode_state(state)
         
         # Get current strategy's action values
-        action_values = advantage_nets[player](np.expand_dims(encoded_state, axis=0)).numpy()[0]
+        action_values = advantage_net[player](np.expand_dims(encoded_state, axis=0)).numpy()[0]
         
         # Calculate advantages (counterfactual regret)
         # In a real implementation, you would calculate the actual counterfactual values
